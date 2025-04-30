@@ -35,12 +35,23 @@ discord.js 예제입니다.
 `'command/{category}/{commandName}.ts'`를 생성하고 `ChatCommand`를 상속 받는 클래스를 만듭니다.
 
 ```typescript
-export default abstract class ChatCommand {
-    abstract data: SlashCommandBuilder; // Discord.js Guide의 SlashCommandBuilder 참조
-    abstract execute(interaction: ChatInputCommandInteraction): Promise<void>; // 명령어 처리기
+import ChatCommand from "../index.js";
+import {ChatInputCommandInteraction, SlashCommandBuilder} from "discord.js";
 
-    public readonly isDeferReply: Boolean = true // 3초 이내 응답하지 않을 경우 오류를 뿜는데, 그걸 방지하기 위한 장치
-    public readonly isEphemeral: Boolean = true // DeferReply를 활성화한 경우 작동하는 설정값. 사용한 유저한테만 보이는 명령어
+export default class Ping extends ChatCommand {
+    data = new SlashCommandBuilder()
+        .setName("ping")
+        .setDescription("Ping Pong!"); // 멍청했다 .toJson 하고 안 된다고 생각하고 있었어 ㅋㅋ
+    isDeferReply = false
+    isEphemeral = false // 만일 isReferReply 가 true 라면, isPublic 이 그제서야 영향 받는다. 현상태는 아무 의미가 없다!
+
+    async execute(interaction: ChatInputCommandInteraction): Promise<void> {
+        if (this.isDeferReply) {
+            await interaction.editReply("Pong!"); // 타임아웃 오류 잠재적 발생 블럭. 무조건 답장은 editReply로
+        } else {
+            await interaction.reply("Pong!"); // 타임아웃 오류가 절대 안 나는 명령어라면 reply. CommandExecutor 에서 deferReply 안 함!
+        }
+    }
 }
 ```
 
@@ -49,11 +60,16 @@ export default abstract class ChatCommand {
 `'event/{eventName}.ts'`를 생성하고 `Event`를 상속 받는 클래스를 만듭니다.
 
 ```typescript
-export default abstract class DiscordEvent {
-    abstract name: string; // 이벤트 이름, ex) 'ready', 'messageCreate' 등
-    public once: Boolean = false; // 이벤트가 한번만 발생하는 경우 true로 설정
+import {Client, Events} from "discord.js";
+import DiscordEvent from "./index.js";
 
-    abstract execute(...args: any[]): Promise<void>; // 이벤트 처리기
+export default class Ready extends DiscordEvent {
+    name = Events.ClientReady.toString();
+    once = true;
+
+    async execute(client: Client): Promise<void> {
+        console.log(`Ready! Logged in as ${client.user?.tag}`);
+    }
 }
 ```
 
@@ -64,7 +80,7 @@ export default abstract class DiscordEvent {
 `'index.ts'`를 살펴보면 알 수 있습니다.
 
 ```typescript
-import loader from "./client/loader";
+import loader from "./client/loader.js";
 
 loader.client.start().then(() => console.log("Clear?"))
 
