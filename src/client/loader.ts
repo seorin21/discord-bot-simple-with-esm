@@ -21,5 +21,4 @@ class ClientLoader {
     }
 }
 
-export const loader = await ClientLoader.getInstance();
-export default loader;
+export default await ClientLoader.getInstance();
