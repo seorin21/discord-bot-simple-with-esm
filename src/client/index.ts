@@ -1,4 +1,4 @@
-import {Client, Collection, IntentsBitField, REST} from "discord.js";
+import {Client, Collection, Guild, IntentsBitField, REST} from "discord.js";
 import {Routes} from 'discord-api-types/rest/v10';
 import {readdir} from "fs/promises";
 import path from "path";
@@ -15,8 +15,9 @@ const EventPath = path.join(__dirname, '..', 'event');
 
 export class CLIENT extends Client {
     readonly commands: Collection<string, ChatCommand> = new Collection();
+    public guild: Guild | undefined;
 
-    constructor() {
+    private constructor() {
         super({
             intents: [
                 IntentsBitField.Flags.Guilds,
@@ -27,9 +28,15 @@ export class CLIENT extends Client {
         });
     }
 
+    static async create(): Promise<CLIENT> {
+        const client = new CLIENT();
+        await client.initialize();
+        return client;
+    }
+
     async start() {
-        await this.initialize();
         await this.login(config.token);
+        // this.guild = this.guilds.cache.get(config.guildId) ?? await this.guilds.fetch(config.guildId);
     }
 
     async stop() {
@@ -42,23 +49,33 @@ export class CLIENT extends Client {
         await this.initEvents();
     }
 
-    private async initCommands() {
-        const commandFolders = (await readdir(CommandPath)).filter(folder => !folder.endsWith('.ts') && !folder.endsWith('.js'));
-
-        for (const folder of commandFolders) {
-            const commandFiles = (await readdir(path.join(CommandPath, folder))).filter(file => file.endsWith('.ts') || file.endsWith('.js'));
-
-            for (const file of commandFiles) {
-                try {
-                    const filePath = path.join(CommandPath, folder, file);
-                    const module = await import(new URL(`file://${filePath}`).href);
-
-                    const command = new module.default() as ChatCommand;
-                    this.commands.set(command.data.name, command);
-                } catch (error) {
-                    console.error(`[Command Loader] Error loading ${file}:`, error);
-                    console.log(`올바르지 않은 파일 ${file}은 무시되었습니다. 해당 위치는 ChatCommand 타입만 가능합니다!`);
+    private async initCommands(root: string = "") {
+        const commandFiles: string[] = [];
+        for (const dir of await readdir(path.join(CommandPath, root), {withFileTypes: true})) {
+            const name = dir.name;
+            if (dir.isFile()) {
+                if (name === "index.ts" || name === "index.js") {
+                    continue;
                 }
+
+                if (name.endsWith(".ts") || name.endsWith(".js")) {
+                    commandFiles.push(name);
+                }
+            } else if (dir.isDirectory()) {
+                await this.initCommands(path.join(root, name));
+            }
+        }
+
+        for (const file of commandFiles) {
+            try {
+                const filePath = path.join(CommandPath, root, file);
+                const module = await import(new URL(`file://${filePath}`).href);
+
+                const command = new module.default() as ChatCommand;
+                this.commands.set(command.data.name, command);
+            } catch (error) {
+                console.error(`[Command Loader] Error loading ${file}:`, error);
+                console.log(`올바르지 않은 파일 ${file}은 무시되었습니다. 해당 위치는 ChatCommand 타입만 가능합니다!`);
             }
         }
     }
@@ -81,12 +98,26 @@ export class CLIENT extends Client {
         }
     }
 
-    private async initEvents() {
-        const eventFiles = (await readdir(EventPath)).filter(file => (file.endsWith('.ts') || file.endsWith('.js')) && file !== 'index.ts' && file !== 'index.js');
+    private async initEvents(root: string = "") {
+        const eventFiles: string[] = [];
+        for (const dir of await readdir(path.join(EventPath, root), {withFileTypes: true})) {
+            const name = dir.name
+            if (dir.isFile()) {
+                if (name === "index.ts" || name === "index.js") {
+                    continue
+                }
+
+                if (name.endsWith(".ts") || name.endsWith(".js")) {
+                    eventFiles.push(name);
+                }
+            } else if (dir.isDirectory()) {
+                this.initEvents(path.join(root, name));
+            }
+        }
 
         for (const file of eventFiles) {
             try {
-                const filePath = path.join(EventPath, file);
+                const filePath = path.join(EventPath, root, file);
                 const module = await import(new URL(`file://${filePath}`).href);
 
                 const event = new module.default() as DiscordEvent;
