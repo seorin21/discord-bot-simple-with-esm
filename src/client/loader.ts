@@ -2,19 +2,25 @@ import {CLIENT} from "./index.js";
 
 class ClientLoader {
     private static instance: ClientLoader | null = null;
-    private readonly _client: CLIENT;
 
     private constructor() {
-        this._client = new CLIENT();
     }
 
+    private _client: CLIENT | null = null;
+
     public get client(): CLIENT {
-        return this._client;
+        return this._client!!;
+    }
+
+    public static async create(): Promise<ClientLoader> {
+        const loader = new ClientLoader();
+        loader._client = await CLIENT.create();
+        return loader;
     }
 
     public static async getInstance(): Promise<ClientLoader> {
         if (!ClientLoader.instance) {
-            ClientLoader.instance = new ClientLoader();
+            ClientLoader.instance = await ClientLoader.create();
         }
 
         return ClientLoader.instance;
